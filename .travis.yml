@@ -7,7 +7,7 @@ cache:
 
 env:
     global:
-        - DEPENDENCIES="symfony/lts:^3"
+        - DEPENDENCIES="symfony/symfony:^4"
         - PHPUNIT_FLAGS="-v --configuration phpunit.xml.dist --coverage-text"
 
 matrix:
