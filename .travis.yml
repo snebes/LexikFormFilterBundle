@@ -1,42 +1,55 @@
 language: php
+sudo: false
 
 cache:
     directories:
         - $HOME/.composer/cache/files
 
-php:
-    - 7.0
-    - 7.1
-    - 7.2
-    - 7.3
-
 env:
     global:
         - MONGO_EXTENSION="mongodb.so"
-        - COMPOSER_FLAGS=""
+        - PHPUNIT_FLAGS="-v  --configuration phpunit.xml.dist --coverage-text"
 
 matrix:
-    include:
-        - php: 5.6
-          env: MONGO_EXTENSION="mongo.so" SYMFONY_VERSION="symfony/lts:^2"
-        - php: 7.1
-          env: SYMFONY_VERSION="symfony/lts:^3"
     fast_finish: true
+    include:
+        # Minimum supported dependencies with the latest and oldest PHP version
+        - php: 7.1
+          env: COMPOSER_FLAGS="--prefer-stable --prefer-lowest" SYMFONY_DEPRECATIONS_HELPER="max[self]=0"
+        - php: 7.2
+          env: COMPOSER_FLAGS="--prefer-stable --prefer-lowest" SYMFONY_DEPRECATIONS_HELPER="max[self]=0"
+        - php: 7.3
+          env: COMPOSER_FLAGS="--prefer-stable --prefer-lowest" SYMFONY_DEPRECATIONS_HELPER="max[self]=0"
 
-services:
-    - mongodb
+        # Test the latest stable release
+        - php: 7.1
+        - php: 7.2
+        - php: 7.3
+          env: COVERAGE=true PHPUNIT_FLAGS="-v --coverage-text"
+
+        # Test LTS versions. This makes sure we do not use Symfony packages with version greater
+        # than 3 respectively. Read more at https://github.com/symfony/lts
+        - php: 7.1
+          env: DEPENDENCIES="symfony/lts:^3"
+
+        # Latest commit to master
+        - php: 7.3
+          env: STABILITY="dev"
+
+    allow_failures:
+        # Dev-master is allowed to fail.
+        - env: STABILITY="dev"
 
 before_install:
     - echo "extension = $MONGO_EXTENSION" >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
-    - echo 'date.timezone = "Europe/Paris"' >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
-    - echo 'memory_limit = -1' >> ~/.phpenv/versions/$(phpenv version-name)/etc/conf.d/travis.ini
+    - if [[ $COVERAGE != true ]]; then phpenv config-rm xdebug.ini || true; fi
+    - if ! [ -z "$STABILITY" ]; then travis_wait composer config minimum-stability ${STABILITY}; fi;
+    - if ! [ -v "$DEPENDENCIES" ]; then composer require --no-update ${DEPENDENCIES}; fi;
 
-before_script:
+install:
     - composer config platform.ext-mongo 1.6.16
-    - if [ "$SYMFONY_VERSION" != "" ]; then travis_wait composer require --no-update $SYMFONY_VERSION; fi;
-    - travis_wait composer update --prefer-dist --no-interaction $COMPOSER_FLAGS
-    - if ! [[ $TRAVIS_PHP_VERSION =~ ^5 ]]; then composer require alcaeus/mongo-php-adapter; fi;
+    - composer update ${COMPOSER_FLAGS} --prefer-dist --no-interaction
 
 script:
     - composer validate --no-check-lock --strict
-    - bin/phpunit --coverage-text
+    - ./bin/phpunit $PHPUNIT_FLAGS
